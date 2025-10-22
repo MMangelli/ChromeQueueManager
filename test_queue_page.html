@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Queue Test Page</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .container {
+            background: white;
+            padding: 40px;
+            border-radius: 10px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+            text-align: center;
+            max-width: 500px;
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+        }
+        #status {
+            font-size: 18px;
+            color: #666;
+            margin: 20px 0;
+        }
+        #queue-display {
+            font-size: 48px;
+            font-weight: bold;
+            color: #667eea;
+            margin: 30px 0;
+            min-height: 60px;
+        }
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(102, 126, 234, 0.3);
+            border-radius: 50%;
+            border-top-color: #667eea;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        .info {
+            background: #f0f0f0;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 20px;
+            font-size: 14px;
+            color: #666;
+        }
+        .settings {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f9f9f9;
+            border-radius: 5px;
+        }
+        .settings label {
+            display: block;
+            margin: 10px 0;
+            font-size: 14px;
+        }
+        .settings input {
+            margin-left: 10px;
+            width: 80px;
+        }
+        button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-top: 10px;
+        }
+        button:hover {
+            background: #5568d3;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Queue Management System</h1>
+
+        <div id="status">Connecting to queue...</div>
+
+        <div id="queue-display">
+            <span class="loading"></span>
+        </div>
+
+        <div class="info">
+            <strong>Page loaded at:</strong> <span id="load-time"></span><br>
+            <strong>Queue number shown at:</strong> <span id="queue-time">Waiting...</span>
+        </div>
+
+        <div class="settings">
+            <h3>Test Settings</h3>
+            <label>
+                Delay (seconds): <input type="number" id="delay-input" value="5" min="1" max="60">
+            </label>
+            <label>
+                Min Queue #: <input type="number" id="min-queue" value="1" min="1" max="1000">
+            </label>
+            <label>
+                Max Queue #: <input type="number" id="max-queue" value="500" min="1" max="1000">
+            </label>
+            <button onclick="resetQueue()">Reset Queue</button>
+        </div>
+    </div>
+
+    <script>
+        // Get URL parameters
+        const urlParams = new URLSearchParams(window.location.search);
+        const delayParam = urlParams.get('delay');
+        const minQueueParam = urlParams.get('min');
+        const maxQueueParam = urlParams.get('max');
+
+        // Use URL params or default values
+        let delay = delayParam ? parseInt(delayParam) : parseInt(document.getElementById('delay-input').value);
+        let minQueue = minQueueParam ? parseInt(minQueueParam) : parseInt(document.getElementById('min-queue').value);
+        let maxQueue = maxQueueParam ? parseInt(maxQueueParam) : parseInt(document.getElementById('max-queue').value);
+
+        // Update input fields if URL params were used
+        if (delayParam) document.getElementById('delay-input').value = delay;
+        if (minQueueParam) document.getElementById('min-queue').value = minQueue;
+        if (maxQueueParam) document.getElementById('max-queue').value = maxQueue;
+
+        // Record page load time
+        const loadTime = new Date().toLocaleTimeString();
+        document.getElementById('load-time').textContent = loadTime;
+
+        // Generate random queue number
+        function generateQueueNumber() {
+            return Math.floor(Math.random() * (maxQueue - minQueue + 1)) + minQueue;
+        }
+
+        // Display queue number after delay
+        setTimeout(() => {
+            const queueNumber = generateQueueNumber();
+            const queueTime = new Date().toLocaleTimeString();
+
+            document.getElementById('status').textContent = 'Connected!';
+            document.getElementById('queue-display').innerHTML = `Queue: ${queueNumber}`;
+            document.getElementById('queue-time').textContent = queueTime;
+        }, delay * 1000);
+
+        // Reset queue function
+        function resetQueue() {
+            delay = parseInt(document.getElementById('delay-input').value);
+            minQueue = parseInt(document.getElementById('min-queue').value);
+            maxQueue = parseInt(document.getElementById('max-queue').value);
+
+            // Build new URL with parameters
+            const newUrl = `${window.location.pathname}?delay=${delay}&min=${minQueue}&max=${maxQueue}`;
+            window.location.href = newUrl;
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pip install:*)",
+      "Bash(C:/Users/mvm80/AppData/Local/Programs/Python/Python312/python.exe -m pip install selenium)",
+      "Bash(netstat:*)",
+      "Bash(findstr:*)",
+      "Bash(C:Usersmvm80AppDataLocalProgramsPythonPython312python.exe -m http.server 8000)",
+      "Bash(timeout:*)",
+      "Bash(python -m http.server:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
