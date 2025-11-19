@@ -78,6 +78,65 @@ class QueueManager:
             self.driver.delete_all_cookies()
             print(f"Cookies deleted from tab {i + 1}")
 
+    def delete_cookies_with_extension(self, extension_id=None, wait_time=3):
+        """
+        Delete cookies using Cookie-Editor extension by automating clicks
+
+        Args:
+            extension_id (str): Chrome extension ID for Cookie-Editor (find in chrome://extensions)
+            wait_time (int): Time to wait for extension popup to load
+        """
+        print("Deleting cookies using Cookie-Editor extension...")
+
+        for i, tab in enumerate(self.tabs):
+            self.driver.switch_to.window(tab)
+
+            try:
+                if extension_id:
+                    # Open Cookie-Editor extension popup directly
+                    extension_url = f"chrome-extension://{extension_id}/popup.html"
+                    self.driver.execute_script(f"window.open('{extension_url}', '_blank');")
+
+                    # Switch to the extension popup window
+                    time.sleep(1)
+                    popup_handle = self.driver.window_handles[-1]
+                    self.driver.switch_to.window(popup_handle)
+
+                    # Wait for popup to load
+                    time.sleep(wait_time)
+
+                    # Try to find and click the delete all cookies button
+                    try:
+                        # Cookie-Editor typically has a "Delete All" button or trash icon
+                        # This may need adjustment based on the extension's UI
+                        delete_button = WebDriverWait(self.driver, 5).until(
+                            EC.element_to_be_clickable((By.XPATH, "//button[contains(text(), 'Delete') or contains(@title, 'Delete')]"))
+                        )
+                        delete_button.click()
+                        print(f"Tab {i + 1}: Clicked delete button in Cookie-Editor")
+                    except:
+                        print(f"Tab {i + 1}: Could not find delete button, trying alternative method...")
+
+                    # Close the popup
+                    self.driver.close()
+
+                    # Switch back to original tab
+                    self.driver.switch_to.window(tab)
+                else:
+                    # Fallback: Use keyboard shortcut to open extension (if configured)
+                    # Then use keyboard navigation to delete cookies
+                    print(f"Tab {i + 1}: Extension ID not provided, using manual method")
+                    print(f"Tab {i + 1}: Please click the Cookie-Editor icon and delete cookies manually")
+                    time.sleep(5)  # Give user time to manually click
+
+                print(f"Tab {i + 1}: Cookies deletion attempted via extension")
+
+            except Exception as e:
+                print(f"Tab {i + 1}: Error using extension - {str(e)}")
+                print(f"Tab {i + 1}: Falling back to Selenium delete_all_cookies()")
+                self.driver.switch_to.window(tab)
+                self.driver.delete_all_cookies()
+
     def refresh_all_tabs(self):
         """Refresh all opened tabs"""
         print("Refreshing all tabs...")
@@ -260,7 +319,8 @@ class QueueManager:
             time.sleep(check_interval)
 
     def run_full_cycle(self, queue_pattern=r'queue[:\s]+(\d+)',
-                       use_continuous_monitoring=True, check_interval=5, max_attempts=60):
+                       use_continuous_monitoring=True, check_interval=5, max_attempts=60,
+                       use_cookie_editor=False, cookie_editor_id=None):
         """
         Run the complete cycle: open tabs, clear cookies, refresh, scan queues
 
@@ -269,15 +329,20 @@ class QueueManager:
             use_continuous_monitoring (bool): Use continuous monitoring instead of single scan
             check_interval (int): Seconds between monitoring checks (if continuous monitoring enabled)
             max_attempts (int): Maximum monitoring attempts (None for unlimited)
+            use_cookie_editor (bool): Use Cookie-Editor extension instead of Selenium's delete_all_cookies
+            cookie_editor_id (str): Extension ID for Cookie-Editor (find in chrome://extensions)
         """
         try:
             self.start_browser()
             time.sleep(2)  # Let browser initialize
 
             self.open_tabs()
-            time.sleep(2)
+            time.sleep(5)  # Wait for all tabs to fully load
 
-            self.delete_cookies()
+            if use_cookie_editor:
+                self.delete_cookies_with_extension(extension_id=cookie_editor_id)
+            else:
+                self.delete_cookies()
             time.sleep(2)
 
             self.refresh_all_tabs()
@@ -314,13 +379,22 @@ def main():
     """Main execution function"""
 
     # Configuration
-    TARGET_URL = "http://localhost:8000/test_queue_page.html?delay=8" #"https://example.com"  # Replace with your target URL
+    TARGET_URL = "https://eventswithdisney.queue-it.net/?PKformID=0x900487abcd&c=eventswithdisney&e=twdcstorepin25nov20"
     NUM_TABS = 5  # Number of tabs to open
 
-    # Optional: Path to your Chrome profile
+    # Optional: Path to your Chrome profile (required if using Cookie-Editor extension)
     # Example for Windows: r"C:\Users\YourUsername\AppData\Local\Google\Chrome\User Data"
     # Leave as None to use default profile
-    CHROME_PROFILE = None
+    # IMPORTANT: Close all Chrome windows before running if using a profile path!
+    CHROME_PROFILE = None  # Set to None to avoid profile lock issues
+
+    # Cookie-Editor Extension Configuration
+    # To find your extension ID:
+    # 1. Open Chrome and go to chrome://extensions/
+    # 2. Enable "Developer mode" (toggle in top right)
+    # 3. Find "Cookie-Editor" and copy the ID (looks like: hlkenndednhfkekhgcdicdfddnkalmdm)
+    USE_COOKIE_EDITOR = False  # Set to True to use Cookie-Editor extension (requires CHROME_PROFILE)
+    COOKIE_EDITOR_ID = None  # Example: "hlkenndednhfkekhgcdicdfddnkalmdm"
 
     # Regex pattern to find queue numbers on the page
     # Adjust this based on how queue numbers appear on your target website
@@ -338,7 +412,9 @@ def main():
     )
 
     manager.run_full_cycle(
-        queue_pattern=QUEUE_PATTERN
+        queue_pattern=QUEUE_PATTERN,
+        use_cookie_editor=USE_COOKIE_EDITOR,
+        cookie_editor_id=COOKIE_EDITOR_ID
     )
 
 
