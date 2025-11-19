@@ -34,14 +34,33 @@ class QueueManager:
 
         # Load Chrome profile if provided (this will have your extensions)
         if chrome_profile_path:
+            # user-data-dir should be the base Chrome User Data folder
+            # profile-directory is the specific profile folder within it
             self.chrome_options.add_argument(f"user-data-dir={chrome_profile_path}")
+            self.chrome_options.add_argument("--profile-directory=Default")
+
+        # Prevent Chrome from restoring previous session
+        self.chrome_options.add_argument("--disable-session-crashed-bubble")
+        self.chrome_options.add_argument("--disable-infobars")
+        self.chrome_options.add_experimental_option("excludeSwitches", ["enable-automation", "enable-logging"])
+
+        # Start with a blank page instead of restoring session
+        self.chrome_options.add_argument("--no-first-run")
+        self.chrome_options.add_argument("--no-default-browser-check")
 
         # Optional: Run in background (comment out if you want to see the browser)
         # self.chrome_options.add_argument('--headless')
 
         # Disable automation flags
-        self.chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
         self.chrome_options.add_experimental_option('useAutomationExtension', False)
+
+        # Prevent session restoration
+        prefs = {
+            "profile.default_content_setting_values.notifications": 2,
+            "profile.exit_type": "Normal",  # Prevent restore pages on startup
+            "session.restore_on_startup": 4  # Open blank page (not restore)
+        }
+        self.chrome_options.add_experimental_option("prefs", prefs)
 
     def start_browser(self):
         """Initialize the Chrome browser"""
@@ -70,13 +89,22 @@ class QueueManager:
 
     def delete_cookies(self):
         """
-        Delete cookies using Selenium's built-in method
+        Delete cookies, local storage, and session storage using Selenium's built-in method
         """
-        print("Deleting cookies from all tabs...")
+        print("Deleting cookies, local storage, and session storage from all tabs...")
         for i, tab in enumerate(self.tabs):
             self.driver.switch_to.window(tab)
+
+            # Delete cookies
             self.driver.delete_all_cookies()
-            print(f"Cookies deleted from tab {i + 1}")
+
+            # Clear local storage and session storage
+            try:
+                self.driver.execute_script("window.localStorage.clear();")
+                self.driver.execute_script("window.sessionStorage.clear();")
+                print(f"Tab {i + 1}: Cleared cookies, local storage, and session storage")
+            except Exception as e:
+                print(f"Tab {i + 1}: Cookies deleted (storage clear failed: {str(e)})")
 
     def delete_cookies_with_extension(self, extension_id=None, wait_time=3):
         """
@@ -105,23 +133,49 @@ class QueueManager:
                     # Wait for popup to load
                     time.sleep(wait_time)
 
-                    # Try to find and click the delete all cookies button
-                    try:
-                        # Cookie-Editor typically has a "Delete All" button or trash icon
-                        # This may need adjustment based on the extension's UI
-                        delete_button = WebDriverWait(self.driver, 5).until(
-                            EC.element_to_be_clickable((By.XPATH, "//button[contains(text(), 'Delete') or contains(@title, 'Delete')]"))
-                        )
-                        delete_button.click()
-                        print(f"Tab {i + 1}: Clicked delete button in Cookie-Editor")
-                    except:
-                        print(f"Tab {i + 1}: Could not find delete button, trying alternative method...")
+                    # Try multiple selectors for the delete button
+                    delete_button = None
+                    selectors = [
+                        # Try different possible selectors
+                        (By.XPATH, "//button[contains(text(), 'Delete')]"),
+                        (By.XPATH, "//button[contains(@title, 'Delete')]"),
+                        (By.XPATH, "//button[contains(@class, 'delete')]"),
+                        (By.CSS_SELECTOR, "button.delete-all"),
+                        (By.CSS_SELECTOR, "button[title*='Delete']"),
+                        (By.XPATH, "//button[@aria-label='Delete all cookies']"),
+                        (By.XPATH, "//*[contains(text(), 'Delete All')]"),
+                        (By.CSS_SELECTOR, ".trash-icon"),
+                        (By.CSS_SELECTOR, "[data-action='delete-all']"),
+                    ]
 
-                    # Close the popup
-                    self.driver.close()
+                    for by, selector in selectors:
+                        try:
+                            delete_button = WebDriverWait(self.driver, 2).until(
+                                EC.element_to_be_clickable((by, selector))
+                            )
+                            delete_button.click()
+                            print(f"Tab {i + 1}: Successfully clicked delete button using selector: {selector}")
+                            break
+                        except:
+                            continue
 
-                    # Switch back to original tab
-                    self.driver.switch_to.window(tab)
+                    if not delete_button:
+                        print(f"Tab {i + 1}: Could not find delete button with any selector")
+                        print(f"Tab {i + 1}: Falling back to Selenium method")
+                        # Close popup and use fallback
+                        self.driver.close()
+                        self.driver.switch_to.window(tab)
+                        self.driver.delete_all_cookies()
+                        self.driver.execute_script("window.localStorage.clear();")
+                        self.driver.execute_script("window.sessionStorage.clear();")
+                    else:
+                        # Wait a moment for deletion to complete
+                        time.sleep(0.5)
+                        # Close the popup
+                        self.driver.close()
+                        # Switch back to original tab
+                        self.driver.switch_to.window(tab)
+
                 else:
                     # Fallback: Use keyboard shortcut to open extension (if configured)
                     # Then use keyboard navigation to delete cookies
@@ -136,15 +190,36 @@ class QueueManager:
                 print(f"Tab {i + 1}: Falling back to Selenium delete_all_cookies()")
                 self.driver.switch_to.window(tab)
                 self.driver.delete_all_cookies()
+                self.driver.execute_script("window.localStorage.clear();")
+                self.driver.execute_script("window.sessionStorage.clear();")
 
-    def refresh_all_tabs(self):
-        """Refresh all opened tabs"""
+    def refresh_all_tabs(self, delay_between_refreshes=2, clear_cookies_before_refresh=False):
+        """
+        Refresh all opened tabs with delay between each
+
+        Args:
+            delay_between_refreshes (int): Seconds to wait between refreshing each tab
+            clear_cookies_before_refresh (bool): Clear cookies/storage right before each individual refresh
+        """
         print("Refreshing all tabs...")
         for i, tab in enumerate(self.tabs):
             self.driver.switch_to.window(tab)
+
+            # Optionally clear cookies right before refresh for this specific tab
+            if clear_cookies_before_refresh:
+                self.driver.delete_all_cookies()
+                try:
+                    self.driver.execute_script("window.localStorage.clear();")
+                    self.driver.execute_script("window.sessionStorage.clear();")
+                except:
+                    pass
+                print(f"Tab {i + 1}: Cleared cookies/storage before refresh")
+
             self.driver.refresh()
             print(f"Refreshed tab {i + 1}")
-            time.sleep(1)  # Small delay between refreshes
+            if i < len(self.tabs) - 1:  # Don't wait after the last tab
+                print(f"Waiting {delay_between_refreshes} seconds before next refresh...")
+                time.sleep(delay_between_refreshes)
 
     def scan_queue_numbers(self, queue_pattern=r'queue[:\s]+(\d+)', timeout=10):
         """
@@ -320,7 +395,7 @@ class QueueManager:
 
     def run_full_cycle(self, queue_pattern=r'queue[:\s]+(\d+)',
                        use_continuous_monitoring=True, check_interval=5, max_attempts=60,
-                       use_cookie_editor=False, cookie_editor_id=None):
+                       use_cookie_editor=False, cookie_editor_id=None, pause_before_cookies=False):
         """
         Run the complete cycle: open tabs, clear cookies, refresh, scan queues
 
@@ -331,6 +406,7 @@ class QueueManager:
             max_attempts (int): Maximum monitoring attempts (None for unlimited)
             use_cookie_editor (bool): Use Cookie-Editor extension instead of Selenium's delete_all_cookies
             cookie_editor_id (str): Extension ID for Cookie-Editor (find in chrome://extensions)
+            pause_before_cookies (bool): Pause before deleting cookies to allow manual setup (e.g., installing extensions)
         """
         try:
             self.start_browser()
@@ -339,13 +415,26 @@ class QueueManager:
             self.open_tabs()
             time.sleep(5)  # Wait for all tabs to fully load
 
+            if pause_before_cookies:
+                print("\n" + "="*60)
+                print("PAUSED - Browser is ready for manual setup")
+                print("You can now:")
+                print("  - Install extensions (like Cookie-Editor)")
+                print("  - Configure browser settings")
+                print("  - Check chrome://extensions/ for extension IDs")
+                print("="*60)
+                input("\nPress Enter to continue with cookie deletion and scanning...")
+
+            # Clear cookies once initially
             if use_cookie_editor:
                 self.delete_cookies_with_extension(extension_id=cookie_editor_id)
             else:
                 self.delete_cookies()
             time.sleep(2)
 
-            self.refresh_all_tabs()
+            # Refresh tabs with individual cookie clearing and delays to get unique queue IDs
+            print("\nRefreshing tabs individually with delays to ensure unique queue positions...")
+            self.refresh_all_tabs(delay_between_refreshes=3, clear_cookies_before_refresh=True)
             time.sleep(3)  # Wait for pages to load after refresh
 
             if use_continuous_monitoring:
@@ -379,30 +468,27 @@ def main():
     """Main execution function"""
 
     # Configuration
-    TARGET_URL = "https://eventswithdisney.queue-it.net/?PKformID=0x900487abcd&c=eventswithdisney&e=twdcstorepin25nov20"
-    NUM_TABS = 5  # Number of tabs to open
+    TARGET_URL = "https://eventswithdisney.queue-it.net/?c=eventswithdisney&e=mogtangledpin25"
+    NUM_TABS = 10  # Number of tabs to open
 
     # Optional: Path to your Chrome profile (required if using Cookie-Editor extension)
-    # Example for Windows: r"C:\Users\YourUsername\AppData\Local\Google\Chrome\User Data"
-    # Leave as None to use default profile
+    # Using a separate profile directory for automation to avoid session restoration issues
+    # This will be a clean profile - you'll need to install Cookie-Editor extension in this profile
     # IMPORTANT: Close all Chrome windows before running if using a profile path!
-    CHROME_PROFILE = None  # Set to None to avoid profile lock issues
+    CHROME_PROFILE = r"C:\Users\mvm80\AppData\Local\Google\Chrome\User Data\AutomationProfile"  # Separate profile for automation
 
     # Cookie-Editor Extension Configuration
     # To find your extension ID:
     # 1. Open Chrome and go to chrome://extensions/
     # 2. Enable "Developer mode" (toggle in top right)
     # 3. Find "Cookie-Editor" and copy the ID (looks like: hlkenndednhfkekhgcdicdfddnkalmdm)
-    USE_COOKIE_EDITOR = False  # Set to True to use Cookie-Editor extension (requires CHROME_PROFILE)
-    COOKIE_EDITOR_ID = None  # Example: "hlkenndednhfkekhgcdicdfddnkalmdm"
+    USE_COOKIE_EDITOR = False  # Using Selenium's built-in method (more reliable than automating extension)
+    COOKIE_EDITOR_ID = "hlkenndednhfkekhgcdicdfddnkalmdm"  # Keep for reference if needed later
 
     # Regex pattern to find queue numbers on the page
-    # Adjust this based on how queue numbers appear on your target website
-    # Examples:
-    # - "Queue: 123" -> r'queue[:\s]+(\d+)'
-    # - "Position in queue: 123" -> r'position in queue[:\s]+(\d+)'
-    # - "Queue #123" -> r'queue\s*#?\s*(\d+)'
-    QUEUE_PATTERN = r'queue[:\s]+(\d+)'
+    # Looking for "Number of users in line ahead of you:" followed by the number
+    # The pattern looks for the text and then captures the number that appears after it
+    QUEUE_PATTERN = r'Number of users in line ahead of you:[\s\S]*?(\d+)'
 
     # Create and run queue manager
     manager = QueueManager(
@@ -414,7 +500,9 @@ def main():
     manager.run_full_cycle(
         queue_pattern=QUEUE_PATTERN,
         use_cookie_editor=USE_COOKIE_EDITOR,
-        cookie_editor_id=COOKIE_EDITOR_ID
+        cookie_editor_id=COOKIE_EDITOR_ID,
+        pause_before_cookies=False,  # No pause needed when using Selenium method
+        max_attempts=1000  # Maximum number of monitoring attempts
     )
 
 
