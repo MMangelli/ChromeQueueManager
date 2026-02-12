@@ -468,7 +468,7 @@ def main():
     """Main execution function"""
 
     # Configuration
-    TARGET_URL = "https://eventswithdisney.queue-it.net/?PKformID=0x900487abcd&c=eventswithdisney&e=twdcstorepin25nov20"
+    TARGET_URL = "https://eventswithdisney.queue-it.net/?c=eventswithdisney&e=twdcstorepin26novel"
     NUM_TABS = 40  # Number of tabs to open
 
     # Optional: Path to your Chrome profile (required if using Cookie-Editor extension)
