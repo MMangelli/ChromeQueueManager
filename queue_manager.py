@@ -468,7 +468,7 @@ def main():
     """Main execution function"""
 
     # Configuration
-    TARGET_URL = "https://eventswithdisney.queue-it.net/?c=eventswithdisney&e=twdcstorepin26novel"
+    TARGET_URL = "https://www.eventswithdisney.com/profile/web/index.cfm?PKwebID=0x149740198f&eventid=927106&e=mogvans2pin26"
     NUM_TABS = 40  # Number of tabs to open
 
     # Optional: Path to your Chrome profile (required if using Cookie-Editor extension)
